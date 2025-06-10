@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'quiz_screen.dart';
-import 'cadastro_screen.dart';
-import '../constants.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../screens/cadastro_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,21 +15,28 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _errorMessage;
+  bool _isLoading = false;
 
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
       try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+        final authService = Provider.of<AuthService>(context, listen: false);
+        await authService.signIn(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => QuizScreen()),
-        );
-      } on FirebaseAuthException catch (e) {
+        Navigator.pushReplacementNamed(context, '/home');
+      } catch (e) {
         setState(() {
-          _errorMessage = e.message;
+          _errorMessage = e.toString();
+        });
+      } finally {
+        setState(() {
+          _isLoading = false;
         });
       }
     }
@@ -77,15 +83,18 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _login,
-                child: const Text('Entrar'),
+                onPressed: _isLoading ? null : _login,
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Entrar'),
               ),
               TextButton(
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => CadastroScreen()),
-                  );
+                  Navigator.pushNamed(context, '/cadastro');
                 },
                 child: const Text('Não tem conta? Cadastre-se'),
               ),

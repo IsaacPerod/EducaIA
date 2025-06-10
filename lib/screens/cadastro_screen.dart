@@ -1,92 +1,137 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 
 class CadastroScreen extends StatefulWidget {
+  const CadastroScreen({super.key});
+
   @override
   _CadastroScreenState createState() => _CadastroScreenState();
 }
 
 class _CadastroScreenState extends State<CadastroScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final List<String> _interests = [
+    'Programação',
+    'Matemática',
+    'Português',
+    'Lógica',
+  ];
   String? _selectedInterest;
-  final List<String> _interests = ['Python', 'Matemática', 'Lógica'];
+  String? _errorMessage;
 
   Future<void> _register() async {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState!.validate() && _selectedInterest != null) {
       try {
-        // Criar usuário no Firebase Auth
-        UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-                email: _emailController.text, password: _passwordController.text);
-        
-        // Salvar perfil no Firestore
+        final authService = Provider.of<AuthService>(context, listen: false);
+        await authService.signUp(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+        final user = FirebaseAuth.instance.currentUser!;
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(userCredential.user!.uid)
+            .doc(user.uid)
             .set({
-          'name': _nameController.text,
-          'email': _emailController.text,
+          'email': _emailController.text.trim(),
           'interests': [_selectedInterest],
-          'level': 'unknown' // Será atualizado após o quiz
+          'created_at': FieldValue.serverTimestamp(),
         });
-
-        // Navegar para o quiz
-        Navigator.pushReplacementNamed(context, '/quiz');
+        print('Interesses salvos: [$_selectedInterest]');
+        Navigator.pushReplacementNamed(context, '/home');
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e')),
-        );
+        setState(() {
+          _errorMessage = e.toString();
+        });
       }
+    } else if (_selectedInterest == null) {
+      setState(() {
+        _errorMessage = 'Por favor, selecione um interesse';
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Cadastro')),
+      appBar: AppBar(title: const Text('Cadastro')),
       body: Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
             children: [
               TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(labelText: 'Nome'),
-                validator: (value) => value!.isEmpty ? 'Nome é obrigatório' : null,
-              ),
-              TextFormField(
                 controller: _emailController,
-                decoration: InputDecoration(labelText: 'Email'),
-                validator: (value) => value!.isEmpty ? 'Email é obrigatório' : null,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira um email';
+                  }
+                  return null;
+                },
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: InputDecoration(labelText: 'Senha'),
+                decoration: const InputDecoration(labelText: 'Senha'),
                 obscureText: true,
-                validator: (value) => value!.length < 6 ? 'Mínimo 6 caracteres' : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira uma senha';
+                  }
+                  return null;
+                },
               ),
+              const SizedBox(height: 20),
               DropdownButtonFormField<String>(
                 value: _selectedInterest,
-                hint: Text('Selecione um interesse'),
-                items: _interests
-                    .map((interest) => DropdownMenuItem(
-                          value: interest,
-                          child: Text(interest),
-                        ))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedInterest = value),
-                validator: (value) => value == null ? 'Selecione um interesse' : null,
+                hint: const Text('Selecione um interesse'),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedInterest = value;
+                  });
+                },
+                items: _interests.map((interest) {
+                  return DropdownMenuItem(
+                    value: interest,
+                    child: Text(interest),
+                  );
+                }).toList(),
+                validator: (value) {
+                  if (value == null) {
+                    return 'Por favor, selecione um interesse';
+                  }
+                  return null;
+                },
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _register,
-                child: Text('Cadastrar'),
+                child: const Text('Cadastrar'),
               ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/login');
+                },
+                child: const Text('Já tem conta? Faça login'),
+              ),
+              if (_errorMessage != null)
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                ),
             ],
           ),
         ),
